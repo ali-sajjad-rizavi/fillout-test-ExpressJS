@@ -1,0 +1,52 @@
+from flask import Flask, request
+import requests
+import json
+
+app = Flask(__name__)
+
+# Demo form ID: cLZojxk94ous
+API_KEY = (
+    "sk_prod_TfMbARhdgues5AuIosvvdAC9WsA5kXiZlW8HZPaRDlIbCpSpLsXBeZO7dCVZQwHAY3P4VSBPiiC33poZ1tdUj2ljOzdTCCOSpUZ_3912"
+)
+
+
+@app.route("/<string:formId>/filteredResponses", methods=["GET"])
+def get_fillout_response(formId: str):
+    filters = json.loads(request.args.get("filters", "[]"))
+
+    res_ = requests.get(
+        f"https://api.fillout.com/v1/api/forms/{formId}/submissions",
+        params=request.args,
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+
+    responses = res_.json()["responses"]
+
+    def is_condition_true(a, b, condition: str) -> bool:
+        return {
+            "equals": a == b,
+            "does_not_equal": a != b,
+            "greater_than": a and (a > b),
+            "less_than": a and (a < b),
+        }[condition]
+
+    print("filters are", filters)
+
+    filtered_responses = []
+    for r in responses:
+        question_lookup = {q["id"]: q for q in r["questions"]}
+
+        if all(
+            is_condition_true(a=question_lookup[f["id"]]["value"], b=f["value"],  condition=f["condition"])
+            for f in filters
+        ):
+            filtered_responses.append(r)
+
+    new_r = dict(res_.json())
+    new_r["responses"] = filtered_responses
+    new_r["total_responses"] = len(filtered_responses)
+    return new_r
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
